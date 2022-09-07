@@ -23,7 +23,7 @@ func NewEpollConnector[Tmessage any,
 	PTmessage interface {
 		Readable
 		*Tmessage
-	}](conn net.Conn, messagehandler MessageHandler[PTmessage]) (*EpollConnector[Tmessage, PTmessage], error) {
+	}, Th MessageHandler[PTmessage]](conn net.Conn, messagehandler Th) (*EpollConnector[Tmessage, PTmessage], error) {
 
 	if conn == nil {
 		return nil, ErrNilConn
