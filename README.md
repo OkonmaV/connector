@@ -19,7 +19,9 @@ type message struct{}
 func (*Message)Read(net.Conn) error {return nil}
 
 //connector.MessageHandler[message] interface implementation:
-type foo struct {}
+type foo struct {
+    con *connector.EpollConnector[message, *message, *foo]
+}
 
 func (*foo) Handle(*message) error {return nil}
 
