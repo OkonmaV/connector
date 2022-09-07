@@ -20,7 +20,8 @@ func (*Message)Read(net.Conn) error {return nil}
 
 //connector.MessageHandler[message] interface implementation:
 type foo struct {
-    con *connector.EpollConnector[message, *message, *foo]
+    con *connector.EpollConnector[message, *message]
+    recon *connector.EpollConnector[message, *message]
 }
 
 func (*foo) Handle(*message) error {return nil}
