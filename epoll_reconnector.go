@@ -11,7 +11,7 @@ type EpollReConnector[Tm any, PTm interface {
 	Readable
 	*Tm
 }] struct {
-	connector  *EpollConnector[Tm, PTm, *EpollReConnector[Tm, PTm]]
+	connector  *EpollConnector[Tm, PTm]
 	msghandler MessageHandler[PTm]
 
 	mux       sync.Mutex
@@ -67,7 +67,7 @@ func (reconreqch ReconnectionProvider[Tm, PTm]) NewEpollReConnector(conn net.Con
 // NO NETW & ADDR VALIDATION
 func (reconreqch ReconnectionProvider[Tm, PTm]) AddToReconnectionQueue(netw string, addr string, messagehandler MessageHandler[PTm], doOnDial func(net.Conn) error, doAfterReconnect func() error) *EpollReConnector[Tm, PTm] {
 	reconn := &EpollReConnector[Tm, PTm]{
-		connector:  &EpollConnector[Tm, PTm, *EpollReConnector[Tm, PTm]]{isclosed: true},
+		connector:  &EpollConnector[Tm, PTm]{isclosed: true},
 		reconAddr:  Addr{netw: netw, address: addr},
 		msghandler: messagehandler,
 		reconReqCh: reconreqch,
