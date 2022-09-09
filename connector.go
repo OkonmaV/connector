@@ -3,7 +3,6 @@ package connector
 import (
 	"errors"
 	"net"
-	"time"
 )
 
 var ErrWeirdData error = errors.New("weird data")
@@ -17,7 +16,7 @@ var ErrReadTimeout error = errors.New("read timeout")
 // lib project/dynamicworkerspool
 type PoolScheduler interface {
 	Schedule(task func())
-	ScheduleWithTimeout(task func(), timeout time.Duration) error
+	//ScheduleWithTimeout(task func(), timeout time.Duration) error
 }
 
 // for user's implementation

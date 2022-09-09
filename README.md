@@ -46,8 +46,8 @@ func main(){
     con.Close(nil)
 
     //reconnector:
-    rp := connector.NewReconnectionProvider[message](context.Background(), time.Second*2, 2, 2)
-    recon, _ := rp.NewEpollReConnector(conn, f, nil, nil)
+    connector.SetupReconnection(context.Background(), time.Second, 1, 1)
+    recon, _ := connector.NewEpollReConnector[message](conn, f, nil, nil)
     err := recon.StartServing(); err != nil {
         recon.ClearFromCache()
         return
