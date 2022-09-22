@@ -3,28 +3,24 @@ package connector
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"time"
 )
 
-const maxlength = 4096
+const maxlength = 2048
 
 type BasicMessage struct {
 	Payload []byte
 }
 
-var errReadedLess error = errors.New("readed less bytes than expected")
-
 func (msg *BasicMessage) Read(conn net.Conn) error {
 
 	buf := make([]byte, 4)
 	conn.SetReadDeadline(time.Now().Add(time.Second * 5))
-	n, err := conn.Read(buf)
+	_, err := io.ReadFull(conn, buf)
 	if err != nil {
 		return err
-	}
-	if n != 4 {
-		return errReadedLess
 	}
 	msglength := binary.LittleEndian.Uint32(buf)
 	if msglength > maxlength {
@@ -33,19 +29,28 @@ func (msg *BasicMessage) Read(conn net.Conn) error {
 	msg.Payload = make([]byte, msglength)
 	//conn.SetReadDeadline(time.Now().Add((time.Millisecond * 700) * (time.Duration((msglength / 1024) + 1))))
 	conn.SetReadDeadline(time.Now().Add(time.Second * 5))
-	if n, err = conn.Read(msg.Payload); err != nil {
+	if _, err = io.ReadFull(conn, msg.Payload); err != nil {
 		return err
-	}
-	//fmt.Println("CONNECTOR MESSAGE READED: ", msg.Payload, " LEN: ", msglength) //////////////////////////////
-	if uint32(n) != msglength {
-		return errReadedLess
 	}
 	return nil
 }
 
-// payload not allocated
-func NewBasicMessage() *BasicMessage {
-	return &BasicMessage{}
+func (msg *BasicMessage) ReadWithoutDeadline(conn net.Conn) error {
+
+	buf := make([]byte, 4)
+	_, err := io.ReadFull(conn, buf)
+	if err != nil {
+		return err
+	}
+	msglength := binary.LittleEndian.Uint32(buf)
+	if msglength > maxlength {
+		return errors.New("payload too long")
+	}
+	msg.Payload = make([]byte, msglength)
+	if _, err = io.ReadFull(conn, msg.Payload); err != nil {
+		return err
+	}
+	return nil
 }
 
 func FormatBasicMessage(message []byte) []byte {

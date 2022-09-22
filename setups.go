@@ -7,6 +7,7 @@ import (
 var (
 	poller netpoll.Poller
 	pool   PoolScheduler
+	//non_e_workers chan struct{}
 )
 
 type EpollErrorHandler func(error) // must start exiting the program

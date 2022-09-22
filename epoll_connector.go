@@ -15,7 +15,7 @@ type EpollConnector[Tm any, PTm interface {
 	conn       net.Conn
 	desc       *netpoll.Desc
 	msghandler MessageHandler[PTm]
-	mux        sync.RWMutex
+	mux        sync.Mutex
 	isclosed   bool
 }
 
@@ -125,8 +125,8 @@ func (connector *EpollConnector[_, _]) stopserving() error {
 
 // call in HandleClose() will cause deadlock
 func (connector *EpollConnector[_, _]) IsClosed() bool {
-	connector.mux.RLock()
-	defer connector.mux.RUnlock()
+	connector.mux.Lock()
+	defer connector.mux.Unlock()
 	return connector.isclosed
 }
 

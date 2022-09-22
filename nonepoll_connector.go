@@ -1,80 +1,144 @@
 package connector
 
-// type Connector struct {
-// 	conn       net.Conn
-// 	msghandler MessageHandler
-// 	mux        sync.RWMutex
-// 	isclosed   bool
-// }
+import (
+	"errors"
+	"net"
+	"sync"
+	"time"
+)
 
-// func NewConnector(conn net.Conn, messagehandler MessageHandler) (*Connector, error) {
-// 	if conn == nil {
-// 		return nil, ErrNilConn
-// 	}
-// 	if pool == nil {
-// 		panic(ErrNilGopool)
-// 	}
+var ErrConnsLimitReached error = errors.New("reached conns limit")
 
-// 	connector := &Connector{conn: conn, msghandler: messagehandler}
+// Количество поднятых на чтение горутин (= незакрытых коннекторов) неконтролируемо (= либе до пизды),
+// контролировать должен тот, кто эти коннекторы создает.
+// Чтобы завершить все горутины, создатель коннектора должен сам закрыть все коннекторы (= либе до пизды),
+// чтобы проконтроллировать завершение всех горутин описаны методы Wait.
 
-// 	return connector, nil
-// }
+type Connector[Tm any, PTm interface {
+	Readable
+	*Tm
+}] struct {
+	conn       net.Conn
+	msghandler MessageHandler[PTm]
+	mux        sync.Mutex
+	isclosed   bool
+}
 
-// func (connector *Connector) StartServing(sheduletimeout time.Duration, keepAlive bool) error {
-// 	//TODO: second serving???
-// 	return pool.ScheduleWithTimeout(func() { connector.handle(keepAlive) }, sheduletimeout)
-// }
+var wg sync.WaitGroup
 
-// func (connector *Connector) handle(keepAlive bool) {
-// 	for {
-// 		message := connector.msghandler.NewMessage()
+func NewConnector[Tmessage any,
+	PTmessage interface {
+		Readable
+		*Tmessage
+	}, Th MessageHandler[PTmessage]](conn net.Conn, messagehandler Th) (*Connector[Tmessage, PTmessage], error) {
+	if conn == nil {
+		return nil, ErrNilConn
+	}
+	if pool == nil {
+		panic(ErrNilGopool)
+	}
 
-// 		err := message.Read(connector.conn)
-// 		if err != nil {
-// 			if keepAlive && errors.Is(err, ErrReadTimeout) {
-// 				continue
-// 			}
-// 			connector.Close(err)
-// 			return
-// 		}
-// 		if err = connector.msghandler.Handle(message); err != nil {
-// 			connector.Close(err)
-// 			return
-// 		}
-// 		if !keepAlive {
-// 			connector.Close(nil)
-// 			return
-// 		}
-// 	}
-// }
+	connector := &Connector[Tmessage, PTmessage]{conn: conn, msghandler: messagehandler}
 
-// func (connector *Connector) Send(message []byte) error {
+	return connector, nil
+}
 
-// 	if connector.IsClosed() {
-// 		return ErrClosedConnector
-// 	}
-// 	//connector.conn.SetWriteDeadline(time.Now().Add(time.Second))
-// 	_, err := connector.conn.Write(message)
-// 	return err
-// }
+func (connector *Connector[Tm, PTm]) StartServing( /* available_worker_timeout time.Duration */ ) error {
+	// if available_worker_timeout == 0 {
+	// 	select {
+	// 	case non_e_workers <- struct{}{}:
+	// 		break
+	// 	default:
+	// 		return ErrConnsLimitReached
+	// 	}
+	// } else {
+	// 	tmr := time.NewTimer(available_worker_timeout)
+	// 	select {
+	// 	case non_e_workers <- struct{}{}:
+	// 		tmr.Stop()
+	// 		break
+	// 	case <-tmr.C:
+	// 		return ErrConnsLimitReached
+	// 	}
+	// }
 
-// func (connector *Connector) Close(reason error) {
-// 	connector.mux.Lock()
-// 	defer connector.mux.Unlock()
+	wg.Add(1)
+	go func() {
+		var err error
+		connector.conn.SetReadDeadline(time.Time{})
 
-// 	if connector.isclosed {
-// 		return
-// 	}
-// 	connector.isclosed = true
-// 	connector.conn.Close()
-// 	connector.msghandler.HandleClose(reason)
-// }
+		for {
+			message := PTm(new(Tm))
+			if err = message.ReadWithoutDeadline(connector.conn); err != nil {
+				break
+			}
+			if pool != nil {
+				pool.Schedule(func() {
+					if err := connector.msghandler.Handle(message); err != nil {
+						connector.Close(err) //вызовет ошибку на чтении = разрыв петли
+					}
+				})
+				continue
+			}
+			if err = connector.msghandler.Handle(message); err != nil {
+				break
+			}
+		}
+		connector.Close(err)
+		wg.Done()
+		//<-non_e_workers
+	}()
+	return nil
+}
 
-// // call in HandleClose() will cause deadlock
-// func (connector *Connector) IsClosed() bool {
-// 	return connector.isclosed
-// }
+func (connector *Connector[_, _]) Send(message []byte) error {
 
-// func (connector *Connector) RemoteAddr() net.Addr {
-// 	return connector.conn.RemoteAddr()
-// }
+	if connector.IsClosed() {
+		return ErrClosedConnector
+	}
+	//connector.conn.SetWriteDeadline(time.Now().Add(time.Second))
+	_, err := connector.conn.Write(message)
+	return err
+}
+
+func (connector *Connector[_, _]) Close(reason error) {
+	connector.mux.Lock()
+	defer connector.mux.Unlock()
+
+	if connector.isclosed {
+		return
+	}
+	connector.isclosed = true
+	connector.conn.Close()
+	connector.msghandler.HandleClose(reason)
+}
+
+// call in HandleClose() will cause deadlock
+func (connector *Connector[_, _]) IsClosed() bool {
+	connector.mux.Lock()
+	defer connector.mux.Unlock()
+	return connector.isclosed
+}
+
+func (connector *Connector[_, _]) RemoteAddr() net.Addr {
+	return connector.conn.RemoteAddr()
+}
+
+func WaitAllNonEpollWorkersDone() {
+	wg.Wait()
+}
+
+func WaitAllNonEpollWorkersDoneWithTimeout(timeout time.Duration) error {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(timeout)
+	select {
+	case <-done:
+		return nil
+	case <-timer.C:
+		return errors.New("timeout reached")
+	}
+}
