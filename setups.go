@@ -41,7 +41,7 @@ func SetEpoll(epoller netpoll.Poller) {
 	if poller != nil {
 		panic("epoll is already set")
 	}
-	if epoller != nil {
+	if epoller == nil {
 		panic("try to set nil poller")
 	}
 	poller = epoller
