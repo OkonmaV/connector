@@ -41,6 +41,14 @@ type Conn interface {
 }
 
 // implemented by connector
+type ReConn interface {
+	Conn
+	//ReconnectedItself(conn net.Conn) error
+	IsReconnectStopped() bool
+	CancelReconnect()
+}
+
+// implemented by connector
 type Sender interface {
 	Send(rawmsg []byte) error
 }
@@ -54,12 +62,4 @@ type Informer interface {
 // implemented by connector
 type Closer interface {
 	Close(error)
-}
-
-// implemented by connector
-type ReConn interface {
-	Conn
-	//ReconnectedItself(conn net.Conn) error
-	IsReconnectStopped() bool
-	CancelReconnect()
 }
